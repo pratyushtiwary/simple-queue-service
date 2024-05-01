@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [push]
+      - id: end-of-file-fixer
+        stages: [push]
+      - id: check-yaml
+        stages: [push]
+      - id: check-added-large-files
+        stages: [push]
