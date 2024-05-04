@@ -27,6 +27,8 @@ func (st Status) Value() (driver.Value, error) {
 
 type Job struct {
 	gorm.Model
-	Id     string
-	Status Status
+	Id       string
+	Status   Status
+	DetailID string
+	Detail   Detail
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"pratyushtiwary/sqs/queue"
+	"pratyushtiwary/sqs/handlers"
 	"pratyushtiwary/sqs/server"
 	"strconv"
 )
@@ -31,12 +31,8 @@ func main() {
 	fmt.Println("Configuration:")
 	fmt.Printf("Host: %s\n", host)
 	fmt.Printf("Port: %s\n", port)
-
-	s, err := server.Listen(host, port)
-
-	if err != nil {
-		panic(err)
-	}
+	fmt.Printf("Buffer Size: %s\n", bufferSize)
+	fmt.Printf("Timeout (in seconds): %s\n", timeout)
 
 	bufferSizeInt, err := strconv.Atoi(bufferSize)
 
@@ -50,12 +46,14 @@ func main() {
 		panic(err)
 	}
 
-	config := queue.QueueConfig{
+	config := server.ServerConfig{
 		BufferSize: bufferSizeInt,
 		Timeout:    timeoutInt,
+		Host:       host,
+		Port:       port,
 	}
 
-	q, err := queue.Init(config)
+	s, err := server.Listen(config)
 
 	if err != nil {
 		panic(err)
@@ -64,6 +62,8 @@ func main() {
 	defer s.Close()
 
 	fmt.Println("Server started successfully!")
+
+	s.SetHandler("jobs", handlers.JobsHandler)
 
 	for {
 		// Accept incoming connections
@@ -75,7 +75,7 @@ func main() {
 		fmt.Printf("Client connected: %s\n", conn.RemoteAddr().String())
 
 		// Handle client connection in a goroutine
-		go q.HandleRequest(conn)
+		go s.HandleRequest(conn)
 	}
 
 }
