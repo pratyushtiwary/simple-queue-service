@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"pratyushtiwary/sqs/handlers"
+	"pratyushtiwary/sqs/queue"
 	"pratyushtiwary/sqs/server"
 	"strconv"
 )
@@ -53,7 +54,13 @@ func main() {
 		Port:       port,
 	}
 
-	s, err := server.Listen(config)
+	q, err := queue.Init()
+
+	if err != nil {
+		panic(err)
+	}
+
+	s, err := server.Listen(config, q)
 
 	if err != nil {
 		panic(err)
@@ -64,6 +71,7 @@ func main() {
 	fmt.Println("Server started successfully!")
 
 	s.SetHandler("jobs", handlers.JobsHandler)
+	s.SetHandler("add_job", handlers.AddJob)
 
 	for {
 		// Accept incoming connections

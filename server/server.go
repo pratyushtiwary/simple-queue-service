@@ -7,10 +7,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"pratyushtiwary/sqs/queue"
 	"time"
 )
 
-type RequestHandler = func(request Request)
+type RequestHandler = func(request Request, queue *queue.Queue) (*Response, error)
 
 type ServerConfig struct {
 	BufferSize int
@@ -22,7 +23,13 @@ type ServerConfig struct {
 type Server struct {
 	Listener net.Listener
 	Config   ServerConfig
+	Queue    *queue.Queue
 	mapping  map[string]RequestHandler
+}
+
+type Response struct {
+	Status string
+	Data   map[string]any
 }
 
 type Request struct {
@@ -30,14 +37,14 @@ type Request struct {
 	Data   map[string]any
 }
 
-func Listen(config ServerConfig) (*Server, error) {
+func Listen(config ServerConfig, queue *queue.Queue) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", config.Host, config.Port))
 
 	if err != nil {
 		return nil, err
 	}
 
-	server := Server{Listener: listener, Config: config}
+	server := Server{Listener: listener, Config: config, Queue: queue}
 
 	return &server, nil
 }
@@ -67,7 +74,34 @@ func (s *Server) HandleRequest(conn net.Conn) {
 		panic(err)
 	}
 
-	handler(*parsedData)
+	response, err := handler(*parsedData, s.Queue)
+
+	if err != nil {
+		response = &Response{
+			Status: "error",
+			Data: map[string]any{
+				"Detail": err.Error(),
+			},
+		}
+	}
+
+	transformedResponse, err := s.transformResponse(response)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Fprint(conn, string(transformedResponse))
+}
+
+func (s *Server) transformResponse(response *Response) ([]byte, error) {
+	result, err := json.Marshal(response)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // Reads data from passed connection,
@@ -136,7 +170,7 @@ func (s *Server) getHandler(request Request) (RequestHandler, error) {
 
 func (s *Server) SetHandler(action string, handler RequestHandler) {
 	if s.mapping == nil {
-		s.mapping = make(map[string]func(request Request))
+		s.mapping = make(map[string]RequestHandler)
 	}
 	s.mapping[action] = handler
 }
