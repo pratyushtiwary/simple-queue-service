@@ -1,58 +1,163 @@
 package queue
 
 import (
-	"pratyushtiwary/sqs/models"
+	"database/sql"
+	"errors"
+	"log"
+	"pratyushtiwary/sqs/queue/queries"
+	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Queue struct {
-	DB *gorm.DB
+	DB *sql.DB
 }
 
 func Init() (*Queue, error) {
-	db, err := gorm.Open(sqlite.Open("queue.db"), &gorm.Config{})
+	db, err := sql.Open("sqlite3", "./queue.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	queue := Queue{
+		DB: db,
+	}
+
+	// let's create tables
+
+	// first we'll create details, cause jobs is dependent on it
+	_, err = db.Exec(queries.DETAIL_CREATE_QUERY)
+	if err != nil {
+		log.Printf("%q: %s\n", err, queries.DETAIL_CREATE_QUERY)
+	}
+
+	// let's create jobs table
+	_, err = db.Exec(queries.JOB_CREATE_QUERY)
+	if err != nil {
+		log.Printf("%q: %s\n", err, queries.JOB_CREATE_QUERY)
+	}
+
+	return &queue, nil
+}
+
+func (q *Queue) AddJob(data []byte) (*Job, error) {
+	id := uuid.New().String()
+	detailId := uuid.New().String()
+
+	// start a transaction
+	tx, err := q.DB.Begin()
+
+	defer tx.Commit()
 
 	if err != nil {
 		return nil, err
 	}
 
-	models.Init(db)
+	stmt, err := tx.Prepare(queries.INSERT_DETAIL_QUERY)
 
-	queue := new(Queue)
+	if err != nil {
+		return nil, err
+	}
 
-	queue.DB = db
+	_, err = stmt.Exec(
+		detailId,
+		data,
+	)
 
-	return queue, nil
-}
+	stmt.Close()
 
-func (q *Queue) AddJob(data string) (*models.Job, error) {
-	id := uuid.New().String()
-	detailId := uuid.New().String()
-	detail := models.Detail{
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, err = tx.Prepare(queries.INSERT_JOB_QUERY)
+
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = stmt.Exec(
+		id,
+		detailId,
+	)
+
+	stmt.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	detail := Detail{
 		Id:   detailId,
-		Data: data,
-	}
-	job := models.Job{
-		Id:       id,
-		Status:   models.PENDING,
-		DetailID: detail.Id,
-		Detail:   detail,
+		Data: string(data),
 	}
 
-	result := q.DB.Create(&detail)
-
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	result = q.DB.Create(&job)
-
-	if result.Error != nil {
-		return nil, result.Error
+	job := Job{
+		Id:        id,
+		Status:    PENDING,
+		Detail:    &detail,
+		CreatedAt: time.Now(),
 	}
 
 	return &job, nil
+}
+
+func (q *Queue) GetJob(id string) (*Job, error) {
+	detail := new(Detail)
+	job := new(Job)
+
+	job.Id = id
+	job.Detail = detail
+
+	rows, err := q.DB.Query(queries.SELECT_JOB_QUERY, id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	valid := rows.Next()
+
+	if !valid {
+		return nil, errors.New("invalid job id")
+	}
+
+	var status Status
+	var createdAt time.Time
+	var detailId string
+
+	var data []byte
+
+	err = rows.Scan(&status, &detailId, &createdAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	job.Status = status
+	job.CreatedAt = createdAt
+
+	rows, err = q.DB.Query(queries.SELECT_DETAIL_QUERY, detailId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	valid = rows.Next()
+
+	if !valid {
+		return nil, errors.New("failed to find details for job")
+	}
+
+	err = rows.Scan(&data)
+
+	if err != nil {
+		return nil, err
+	}
+
+	detail.Data = string(data)
+	detail.Id = id
+
+	job.Detail = detail
+
+	return job, nil
 }

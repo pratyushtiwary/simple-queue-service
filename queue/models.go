@@ -1,11 +1,11 @@
-package models
+package queue
 
 import (
 	"database/sql/driver"
-
-	"gorm.io/gorm"
+	"time"
 )
 
+// 1:1 representation of tables in db
 type Status string
 
 const (
@@ -25,10 +25,14 @@ func (st Status) Value() (driver.Value, error) {
 	return string(st), nil
 }
 
+type Detail struct {
+	Id   string
+	Data string
+}
+
 type Job struct {
-	gorm.Model
-	Id       string
-	Status   Status
-	DetailID string
-	Detail   Detail
+	Id        string
+	Status    Status
+	CreatedAt time.Time
+	Detail    *Detail
 }

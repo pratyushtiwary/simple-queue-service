@@ -20,7 +20,7 @@ func AddJob(request server.Request, queue *queue.Queue) (*server.Response, error
 		return nil, err
 	}
 
-	job, err := queue.AddJob(string(data))
+	job, err := queue.AddJob(data)
 
 	if err != nil {
 		return nil, err
