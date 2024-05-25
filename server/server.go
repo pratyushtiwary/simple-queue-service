@@ -83,6 +83,10 @@ func (s *Server) HandleRequest(conn net.Conn) {
 				"Detail": err.Error(),
 			},
 		}
+	} else {
+		if response.Status == "" {
+			response.Status = "success" // defaults to success
+		}
 	}
 
 	transformedResponse, err := s.transformResponse(response)

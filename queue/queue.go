@@ -104,12 +104,37 @@ func (q *Queue) AddJob(data []byte) (*Job, error) {
 	return &job, nil
 }
 
-func (q *Queue) GetJob(id string) (*Job, error) {
+func (q *Queue) getDetail(detailId string) (*Detail, error) {
 	detail := new(Detail)
+	var data []byte
+
+	rows, err := q.DB.Query(queries.SELECT_DETAIL_QUERY, detailId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	valid := rows.Next()
+
+	if !valid {
+		return nil, errors.New("failed to find details for job")
+	}
+
+	err = rows.Scan(&data)
+
+	if err != nil {
+		return nil, err
+	}
+
+	detail.Data = string(data)
+	detail.Id = detailId
+
+	return detail, nil
+}
+
+func (q *Queue) GetJob(id string) (*Job, error) {
 	job := new(Job)
 
 	job.Id = id
-	job.Detail = detail
 
 	rows, err := q.DB.Query(queries.SELECT_JOB_QUERY, id)
 	if err != nil {
@@ -126,8 +151,6 @@ func (q *Queue) GetJob(id string) (*Job, error) {
 	var createdAt time.Time
 	var detailId string
 
-	var data []byte
-
 	err = rows.Scan(&status, &detailId, &createdAt)
 
 	if err != nil {
@@ -137,27 +160,86 @@ func (q *Queue) GetJob(id string) (*Job, error) {
 	job.Status = status
 	job.CreatedAt = createdAt
 
-	rows, err = q.DB.Query(queries.SELECT_DETAIL_QUERY, detailId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-	valid = rows.Next()
-
-	if !valid {
-		return nil, errors.New("failed to find details for job")
-	}
-
-	err = rows.Scan(&data)
+	detail, err := q.getDetail(detailId)
 
 	if err != nil {
 		return nil, err
 	}
 
-	detail.Data = string(data)
-	detail.Id = id
+	job.Detail = detail
+
+	return job, nil
+}
+
+func (q *Queue) Job() (*Job, error) {
+	job := new(Job)
+
+	rows, err := q.DB.Query(queries.SELECT_FIRST_QUEUED_JOB_QUERY, PENDING)
+	if err != nil {
+		log.Fatal(err)
+	}
+	valid := rows.Next()
+
+	if !valid {
+		return nil, errors.New("no pending jobs found")
+	}
+
+	var status Status = SUBMITTED
+	var id string
+	var detailId string
+	var createdAt time.Time
+
+	err = rows.Scan(&id, &detailId, &createdAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	job.Status = status
+	job.CreatedAt = createdAt
+	job.Id = id
+
+	detail, err := q.getDetail(detailId)
+
+	if err != nil {
+		return nil, err
+	}
 
 	job.Detail = detail
+
+	rows.Close()
+
+	// update the job's status
+
+	// start a transaction
+	tx, err := q.DB.Begin()
+
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, err := tx.Prepare(queries.UPDATE_JOB_STATUS_QUERY)
+
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = stmt.Exec(
+		status,
+		id,
+	)
+
+	stmt.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return nil, err
+	}
 
 	return job, nil
 }

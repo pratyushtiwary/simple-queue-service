@@ -73,6 +73,7 @@ func main() {
 	s.SetHandler("jobs", handlers.JobsHandler)
 	s.SetHandler("add_job", handlers.AddJob)
 	s.SetHandler("get_job", handlers.GetJob)
+	s.SetHandler("job", handlers.Job)
 
 	for {
 		// Accept incoming connections
