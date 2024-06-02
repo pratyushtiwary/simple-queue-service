@@ -19,3 +19,13 @@
 
 # Go workspace file
 go.work
+
+# Sqlite files
+*.db
+
+# payload json files for testing
+*.payload.json
+
+# logs
+logs/*.log
+logs/*.err
