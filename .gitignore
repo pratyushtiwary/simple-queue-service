@@ -25,3 +25,7 @@ go.work
 
 # payload json files for testing
 *.payload.json
+
+# logs
+logs/*.log
+logs/*.err
