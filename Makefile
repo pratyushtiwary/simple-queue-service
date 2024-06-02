@@ -8,12 +8,12 @@ else
    endif
 endif
 
+install:
+	go mod download
 build:
-	go build .
+	go build -mod=vendor .
 run:
 	go run .
-install:
-   go mod download
 clean:
 	$(RM) $(call FixPath,queue.db)
 	$(RM) $(call FixPath,logs/queue.log)
