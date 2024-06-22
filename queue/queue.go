@@ -243,3 +243,26 @@ func (q *Queue) Job() (*Job, error) {
 
 	return job, nil
 }
+
+func (q *Queue) Jobs() ([]string, error) {
+	var jobs []string
+	var jobId string
+
+	//TODO: Add support for filters
+	rows, err := q.DB.Query(queries.LIST_JOB_QUERY, PENDING)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&jobId)
+
+		if err != nil {
+			return nil, err
+		}
+
+		jobs = append(jobs, jobId)
+	}
+
+	return jobs, nil
+}
